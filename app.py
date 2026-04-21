@@ -172,8 +172,32 @@ def main():
 
         st.markdown("---")
 
+    # 캘린더 상단 네비게이션
+    st.markdown("<br>", unsafe_allow_html=True)
+    col_prev, col_title, col_next = st.columns([1, 10, 1])
+    
+    with col_prev:
+        if st.button("◀", use_container_width=True, help="이전 달로 이동"):
+            if st.session_state.month == 1:
+                st.session_state.month = 12
+                st.session_state.year -= 1
+            else:
+                st.session_state.month -= 1
+            st.rerun()
+
+    with col_title:
+        st.markdown(f"<h3 style='text-align: center; margin-top: 0;'>{st.session_state.year}년 {st.session_state.month}월</h3>", unsafe_allow_html=True)
+
+    with col_next:
+        if st.button("▶", use_container_width=True, help="다음 달로 이동"):
+            if st.session_state.month == 12:
+                st.session_state.month = 1
+                st.session_state.year += 1
+            else:
+                st.session_state.month += 1
+            st.rerun()
+
     # 캘린더 렌더링
-    st.markdown(f"### {st.session_state.year}년 {st.session_state.month}월")
     render_calendar(st.session_state.year, st.session_state.month, videos)
 
 def target_date_placeholder(now, y, m):
