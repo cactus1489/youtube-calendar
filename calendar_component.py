@@ -41,7 +41,8 @@ def render_calendar(year, month, videos):
             padding: 30px;
             border: 1px solid rgba(255, 255, 255, 0.1);
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
-            width: 1000px;
+            width: 98%;
+            max-width: 1100px;
             margin: 0 auto;
             box-sizing: border-box;
         }}
@@ -54,7 +55,7 @@ def render_calendar(year, month, videos):
         }}
         
         .month-name {{
-            font-size: clamp(18px, 5vw, 28px);
+            font-size: clamp(20px, 5vw, 32px);
             font-weight: 800;
             letter-spacing: -0.02em;
             background: linear-gradient(135deg, #fff 30%, #888 100%);
@@ -70,12 +71,12 @@ def render_calendar(year, month, videos):
         
         .weekday {{
             text-align: center;
-            font-weight: 700;
-            font-size: clamp(10px, 2vw, 13px);
-            color: #8e92a2;
-            padding-bottom: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
+            font-weight: 800;
+            font-size: clamp(12px, 2vw, 16px);
+            color: #ffffff;
+            padding-bottom: 15px;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+            margin-bottom: 10px;
         }}
         
         .day-cell {{
@@ -284,13 +285,13 @@ def render_calendar(year, month, videos):
             <div class="month-name">{month_name} {year}</div>
         </div>
         <div class="calendar-grid">
-            <div class="weekday">SUN</div>
-            <div class="weekday">MON</div>
-            <div class="weekday">TUE</div>
-            <div class="weekday">WED</div>
-            <div class="weekday">THU</div>
-            <div class="weekday">FRI</div>
-            <div class="weekday">SAT</div>
+            <div class="weekday">일</div>
+            <div class="weekday">월</div>
+            <div class="weekday">화</div>
+            <div class="weekday">수</div>
+            <div class="weekday">목</div>
+            <div class="weekday">금</div>
+            <div class="weekday">토</div>
     """
     
     for week in cal:
@@ -393,5 +394,5 @@ def render_calendar(year, month, videos):
     </script>
     """
     
-    # 렌더링 (가로 1000px 고정 및 스크롤 제거)
-    components.html(html_code, width=1000, height=1000, scrolling=False)
+    # 렌더링 (너비는 가변형으로, 높이는 충분히 확보)
+    components.html(html_code, height=900, scrolling=False)
