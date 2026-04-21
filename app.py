@@ -235,7 +235,7 @@ def main():
             target_date_placeholder(now, st.session_state.year, st.session_state.month),
             max_value=now.date() 
         )
-        yt_url = st.text_input("유튜브 URL 입력", placeholder="https://www.youtube.com/watch?v=...")
+        yt_url = st.text_input("유튜브 URL 입력", placeholder="https://www.youtube.com/watch?v=...", key="yt_url_input")
         
         if st.button("캘린더에 추가", use_container_width=True):
             if target_date > now.date():
@@ -245,6 +245,8 @@ def main():
                 if v_id:
                     date_str = target_date.strftime("%Y-%m-%d")
                     add_video_to_db(date_str, v_id, yt_url, st.session_state.current_calendar)
+                    # 입력창 초기화
+                    st.session_state.yt_url_input = ""
                     st.success(f"'{st.session_state.current_calendar}'에 영상이 추가되었습니다!")
                     st.rerun()
                 else:
