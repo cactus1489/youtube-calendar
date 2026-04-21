@@ -201,9 +201,15 @@ def main():
     render_calendar(st.session_state.year, st.session_state.month, videos)
 
 def target_date_placeholder(now, y, m):
+    """제안 날짜가 오늘(max_value)을 초과하지 않도록 제한합니다."""
+    target = datetime(y, m, 1).date()
+    
+    # 만약 현재 보고 있는 년/월이 현재 시점이라면 오늘 날짜 반환
     if now.year == y and now.month == m:
-        return now
-    return datetime(y, m, 1)
+        return now.date()
+        
+    # 제안 날짜가 오늘보다 미래라면 오늘 날짜로 캡핑 (오류 방지)
+    return min(target, now.date())
 
 if __name__ == "__main__":
     main()
