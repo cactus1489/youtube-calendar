@@ -2,7 +2,8 @@ import streamlit as st
 import json
 import os
 import re
-from datetime import datetime
+import yt_dlp
+from datetime import datetime, timedelta
 from sqlalchemy import text
 from calendar_component import render_calendar
 
@@ -24,7 +25,9 @@ def init_db():
                 video_id TEXT NOT NULL,
                 video_url TEXT NOT NULL,
                 added_at TEXT NOT NULL,
-                calendar_name TEXT DEFAULT '기본 캘린더'
+                calendar_name TEXT DEFAULT '기본 캘린더',
+                video_title TEXT,
+                duration INTEGER DEFAULT 0
             );
         """))
         # 캘린더 목록 관리 테이블 생성
@@ -37,9 +40,11 @@ def init_db():
         # 기본 캘린더 초기값 삽입
         s.execute(text("INSERT INTO vcalendar_info (calendar_name) VALUES ('기본 캘린더') ON CONFLICT (calendar_name) DO NOTHING;"))
         
-        # 기존 테이블에 calendar_name 컬럼이 없는 경우를 위한 안전장치
+        # 신 규 컬럼 추가 (ALTER TABLE 안전장치)
         try:
             s.execute(text("ALTER TABLE vcalendar_videos ADD COLUMN IF NOT EXISTS calendar_name TEXT DEFAULT '기본 캘린더'"))
+            s.execute(text("ALTER TABLE vcalendar_videos ADD COLUMN IF NOT EXISTS video_title TEXT"))
+            s.execute(text("ALTER TABLE vcalendar_videos ADD COLUMN IF NOT EXISTS duration INTEGER DEFAULT 0"))
         except:
             pass
         s.commit()
@@ -73,6 +78,23 @@ def get_video_id(url):
     regex = r"(?:v=|\/|embed\/|shorts\/|youtu.be\/)([0-9A-Za-z_-]{11})"
     match = re.search(regex, url)
     return match.group(1) if match else None
+
+def get_video_info(url):
+    """yt-dlp를 사용하여 영상 제목과 길이를 자동으로 가져옵니다."""
+    try:
+        ydl_opts = {
+            'skip_download': True,
+            'quiet': True,
+            'no_warnings': True,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            return {
+                "title": info.get('title', '제목 없음'),
+                "duration": info.get('duration', 0)  # 초 단위
+            }
+    except Exception as e:
+        return {"title": "정보를 불러올 수 없음", "duration": 0}
 
 def load_data_from_db(calendar_name):
     """특정 캘린더의 모든 영상 데이터를 읽어와서 앱 형식에 맞게 변환합니다."""
@@ -122,13 +144,16 @@ def add_calendar_name_to_db(name):
     except:
         return False
 
-def add_video_to_db(date_str, video_id, url, calendar_name):
+def add_video_to_db(date_str, video_id, url, calendar_name, title=None, duration=0):
     """영상을 특정 캘린더에 추가합니다."""
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with conn.session as s:
         s.execute(
-            text("INSERT INTO vcalendar_videos (video_date, video_id, video_url, added_at, calendar_name) VALUES (:d, :vid, :u, :a, :c)"),
-            {"d": date_str, "vid": video_id, "u": url, "a": now_str, "c": calendar_name}
+            text("""
+                INSERT INTO vcalendar_videos (video_date, video_id, video_url, added_at, calendar_name, video_title, duration) 
+                VALUES (:d, :vid, :u, :a, :c, :t, :dur)
+            """),
+            {"d": date_str, "vid": video_id, "u": url, "a": now_str, "c": calendar_name, "t": title, "dur": duration}
         )
         s.commit()
 
@@ -179,6 +204,11 @@ def main():
     st.markdown("유튜브 영상을 기록하고 썸네일로 확인하는 스마트 캘린더입니다.")
 
     now = datetime.now()
+
+    # [오류 해결] 입력창 초기화 예약 처리 (위젯 생성 전 수행)
+    if st.session_state.get('clear_url'):
+        st.session_state.yt_url_input = ""
+        st.session_state.clear_url = False
 
     # 사이드바: 멀티 캘린더 관리 및 기능 정리
     with st.sidebar:
@@ -243,11 +273,19 @@ def main():
             else:
                 v_id = get_video_id(yt_url)
                 if v_id:
+                    with st.spinner("유튜브 정보 수집 중..."):
+                        v_info = get_video_info(yt_url)
+                        
                     date_str = target_date.strftime("%Y-%m-%d")
-                    add_video_to_db(date_str, v_id, yt_url, st.session_state.current_calendar)
-                    # 입력창 초기화
-                    st.session_state.yt_url_input = ""
-                    st.success(f"'{st.session_state.current_calendar}'에 영상이 추가되었습니다!")
+                    add_video_to_db(
+                        date_str, v_id, yt_url, 
+                        st.session_state.current_calendar,
+                        v_info['title'],
+                        v_info['duration']
+                    )
+                    # 입력창 초기화 예약
+                    st.session_state.clear_url = True
+                    st.success(f"'{v_info['title']}' 영상이 추가되었습니다! ({v_info['duration']//60}분 {v_info['duration']%60}초)")
                     st.rerun()
                 else:
                     st.error("유효한 유튜브 URL을 입력해주세요.")
@@ -274,6 +312,46 @@ def main():
                         st.rerun()
         else:
             st.info("이 날짜에 저장된 영상이 없습니다.")
+
+        st.markdown("---")
+        
+        # --- 활동 통계 대시보드 섹션 ---
+        st.header("📊 통계 대시보드")
+        
+        # 데이터 집계 (요일별 운동 시간)
+        try:
+            import pandas as pd
+            # 현재 캘린더의 모든 비디오 데이터 가져오기 (가비지 데이터 제외)
+            df_stats = conn.query(
+                "SELECT video_date, duration FROM vcalendar_videos WHERE calendar_name = :c AND duration > 0", 
+                params={"c": st.session_state.current_calendar}, 
+                ttl=0
+            )
+            
+            if not df_stats.empty:
+                df_stats['date'] = pd.to_datetime(df_stats['video_date'])
+                df_stats['day_of_week'] = df_stats['date'].dt.day_name()
+                
+                # 요일 순서 고정
+                day_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+                day_kr = ['월', '화', '수', '목', '금', '토', '일']
+                
+                # 요일별 합산 (분 단위)
+                weekly_sum = df_stats.groupby('day_of_week')['duration'].sum() / 60
+                weekly_sum = weekly_sum.reindex(day_order).fillna(0)
+                weekly_sum.index = day_kr
+                
+                # 총 운동 시간 표시
+                total_min = int(weekly_sum.sum())
+                st.metric("이번 달 총 운동 시간", f"{total_min}분")
+                
+                # 바 차트 출력
+                st.bar_chart(weekly_sum, color="#ff4b4b")
+                st.caption("요일별 총 운동 시간 (분)")
+            else:
+                st.info("운동 시간 데이터가 아직 없습니다. 영상을 등록해 보세요!")
+        except Exception as e:
+            st.error(f"통계 로드 오류: {e}")
 
         st.markdown("---")
 
