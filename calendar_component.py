@@ -43,7 +43,7 @@ def render_calendar(year, month, videos):
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
             width: 98%;
             max-width: 1100px;
-            margin: 0 auto;
+            margin: 50px auto 120px auto; /* 상단 50px, 하단 120px 여백 */
             box-sizing: border-box;
         }}
         
@@ -394,5 +394,5 @@ def render_calendar(year, month, videos):
     </script>
     """
     
-    # 렌더링 (너비는 가변형으로, 높이는 충분히 확보)
-    components.html(html_code, height=900, scrolling=False)
+    # 렌더링 (높이를 넉넉히 1200으로 늘려 하단 여백 보존)
+    components.html(html_code, height=1200, scrolling=False)

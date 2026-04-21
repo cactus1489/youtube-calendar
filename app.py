@@ -356,14 +356,11 @@ def main():
         st.markdown("---")
 
     # 캘린더 상단 네비게이션 (반응형 최적화)
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    # 캘린더가 최대 1100px이므로 내비게이션도 그에 맞춰 중앙 집중 배치
-    _, nav_container, _ = st.columns([1, 1, 1]) # 넓게 3등분
+    # 캘린더 본문(max-width: 1100px)과 보조를 맞추기 위해 중앙 컨테이너 폭 확장
+    _, nav_container, _ = st.columns([1, 2, 1]) 
     
     with nav_container:
-        # 버튼과 제목 사이의 간격을 '1cm' 느낌으로 긴밀하게 유지 (비율 조정)
-        # 사용자님의 요청에 따른 [2, 3, 2] 비율 적용
+        # 버튼과 제목 사이의 간격을 대칭적으로 유지
         col_prev, col_title, col_next = st.columns([2, 3, 2])
         
         with col_prev:
@@ -390,6 +387,9 @@ def main():
 
     # 캘린더 렌더링
     render_calendar(st.session_state.year, st.session_state.month, videos)
+    
+    # 캘린더 하단 여백 추가 (약 2cm 이상의 넉넉한 공간 확보)
+    st.markdown("<div style='margin-bottom: 120px;'></div>", unsafe_allow_html=True)
 
 def target_date_placeholder(now, y, m):
     """제안 날짜가 오늘(max_value)을 초과하지 않도록 제한합니다."""
