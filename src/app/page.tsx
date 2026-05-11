@@ -115,9 +115,13 @@ export default function CalendarPage() {
       if (res.ok) {
         setNewUrl(''); setNewImageUrl(''); setNewNote('');
         setIsAddModalOpen(false); fetchVideos();
+      } else {
+        const errorData = await res.json();
+        alert(`저장 실패: ${errorData.error || '상세 사유 모름'}`);
       }
-    } catch (error) {
-      alert('저장 실패');
+    } catch (error: any) {
+      console.error('Save Error:', error);
+      alert(`네트워크 오차: ${error.message}`);
     } finally {
       setIsSubmitting(false);
     }

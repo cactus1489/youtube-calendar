@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
-import { writeFile } from 'fs/promises';
-import { join } from 'path';
+import { supabase } from '@/lib/supabase';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -20,12 +19,12 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  console.log('--- POST REQUEST RECEIVED ---');
+  
   try {
     const contentType = request.headers.get('content-type') || '';
-    
     let video_url, video_date, calendar_name, media_type, image_url, note_content;
 
-    // FormData (파일 업로드) 처리
     if (contentType.includes('multipart/form-data')) {
       const formData = await request.formData();
       video_date = formData.get('video_date') as string;
@@ -36,17 +35,38 @@ export async function POST(request: Request) {
 
       const file = formData.get('file') as File;
       if (file) {
-        const bytes = await file.arrayBuffer();
-        const buffer = Buffer.from(bytes);
+        console.log('--- STARTING SECURE STORAGE UPLOAD ---');
+        console.log(`File Name: ${file.name}, Size: ${Math.round(file.size / 1024)}KB`);
         
-        // 파일명 생성 (타임스탬프 + 원본명)
-        const fileName = `${Date.now()}_${file.name.replace(/\s/g, '_')}`;
-        const path = join(process.cwd(), 'public', 'uploads', fileName);
-        await writeFile(path, buffer);
-        image_url = `/uploads/${fileName}`;
+        // 한글이나 특수문자를 제거하고 안전한 영문/숫자로만 파일명 생성
+        const safeName = file.name.replace(/[^\x00-\x7F]/g, '').replace(/\s/g, '_');
+        const fileName = `${Date.now()}_${safeName || 'image.png'}`;
+        
+        // 파일을 ArrayBuffer로 변환하여 더 안정적으로 업로드 시도
+        const arrayBuffer = await file.arrayBuffer();
+        
+        const { data, error: storageError } = await supabase.storage
+          .from('memories')
+          .upload(fileName, arrayBuffer, {
+            contentType: file.type,
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (storageError) {
+          console.error('❌ STORAGE UPLOAD FAILED:', storageError);
+          throw new Error(`Storage upload failed: ${storageError.message}`);
+        }
+
+        console.log('✅ STORAGE UPLOAD SUCCESS:', data.path);
+
+        const { data: publicUrlData } = supabase.storage
+          .from('memories')
+          .getPublicUrl(fileName);
+          
+        image_url = publicUrlData.publicUrl;
       }
     } else {
-      // 일반 JSON 처리
       const body = await request.json();
       video_url = body.video_url;
       video_date = body.video_date;
@@ -92,11 +112,11 @@ export async function POST(request: Request) {
       await pool.query(query, values);
       return NextResponse.json({ success: true, title, image_url });
     } catch (dbError: any) {
-      console.error('DB ERROR:', dbError.message);
+      console.error('❌ DB ERROR:', dbError.message);
       return NextResponse.json({ error: dbError.message }, { status: 500 });
     }
   } catch (error: any) {
-    console.error('POST GLOBAL ERROR:', error.message);
+    console.error('❌ POST GLOBAL ERROR:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
