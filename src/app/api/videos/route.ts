@@ -5,11 +5,17 @@ import { supabase } from '@/lib/supabase';
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const calendarName = searchParams.get('calendar') || '기본 캘린더';
+  const userId = searchParams.get('userId'); // 사용자 ID 쿼리 파라미터 추가
+
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized: User ID is required' }, { status: 401 });
+  }
 
   try {
+    // 본인의 데이터만 가져오도록 쿼리 수정
     const result = await pool.query(
-      'SELECT * FROM vcalendar_videos WHERE calendar_name = $1 ORDER BY added_at ASC',
-      [calendarName]
+      'SELECT * FROM vcalendar_videos WHERE calendar_name = $1 AND user_id = $2 ORDER BY added_at ASC',
+      [calendarName, userId]
     );
     return NextResponse.json(result.rows);
   } catch (error) {
@@ -19,11 +25,11 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  console.log('--- POST REQUEST RECEIVED ---');
+  console.log('--- AUTHENTICATED POST REQUEST RECEIVED ---');
   
   try {
     const contentType = request.headers.get('content-type') || '';
-    let video_url, video_date, calendar_name, media_type, image_url, note_content;
+    let video_url, video_date, calendar_name, media_type, image_url, note_content, user_id;
 
     if (contentType.includes('multipart/form-data')) {
       const formData = await request.formData();
@@ -32,19 +38,15 @@ export async function POST(request: Request) {
       media_type = formData.get('media_type') as string;
       note_content = formData.get('note_content') as string;
       video_url = formData.get('video_url') as string;
+      user_id = formData.get('user_id') as string; // 사용자 ID 추출
 
       const file = formData.get('file') as File;
       if (file) {
         console.log('--- STARTING SECURE STORAGE UPLOAD ---');
-        console.log(`File Name: ${file.name}, Size: ${Math.round(file.size / 1024)}KB`);
-        
-        // 한글이나 특수문자를 제거하고 안전한 영문/숫자로만 파일명 생성
         const safeName = file.name.replace(/[^\x00-\x7F]/g, '').replace(/\s/g, '_');
         const fileName = `${Date.now()}_${safeName || 'image.png'}`;
         
-        // 파일을 ArrayBuffer로 변환하여 더 안정적으로 업로드 시도
         const arrayBuffer = await file.arrayBuffer();
-        
         const { data, error: storageError } = await supabase.storage
           .from('memories')
           .upload(fileName, arrayBuffer, {
@@ -57,8 +59,6 @@ export async function POST(request: Request) {
           console.error('❌ STORAGE UPLOAD FAILED:', storageError);
           throw new Error(`Storage upload failed: ${storageError.message}`);
         }
-
-        console.log('✅ STORAGE UPLOAD SUCCESS:', data.path);
 
         const { data: publicUrlData } = supabase.storage
           .from('memories')
@@ -74,6 +74,11 @@ export async function POST(request: Request) {
       media_type = body.media_type;
       image_url = body.image_url;
       note_content = body.note_content;
+      user_id = body.user_id; // 사용자 ID 추출
+    }
+
+    if (!user_id) {
+      return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
     }
     
     let video_id = null;
@@ -104,9 +109,9 @@ export async function POST(request: Request) {
 
     const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
     const query = `INSERT INTO vcalendar_videos 
-       (video_date, video_id, video_url, added_at, calendar_name, video_title, duration, media_type, image_url, note_content) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`;
-    const values = [video_date, video_id, video_url, now, calendar_name || '기본 캘린더', title, duration, media_type, image_url, note_content];
+       (video_date, video_id, video_url, added_at, calendar_name, video_title, duration, media_type, image_url, note_content, user_id) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`;
+    const values = [video_date, video_id, video_url, now, calendar_name || '기본 캘린더', title, duration, media_type, image_url, note_content, user_id];
 
     try {
       await pool.query(query, values);

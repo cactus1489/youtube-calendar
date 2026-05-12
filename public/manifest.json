@@ -1,0 +1,22 @@
+{
+  "name": "Y-Calendar: 추억의 기록",
+  "short_name": "Y-Calendar",
+  "description": "유튜브 영상, 사진, 메모를 기록하는 당신만의 멀티미디어 캘린더",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}

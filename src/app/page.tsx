@@ -5,12 +5,16 @@ import { Video } from '@/lib/types';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, parseISO } from 'date-fns';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
+import { MonitorPlay as Youtube, Image as ImageIcon, FileText, Layers, LogOut } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { User } from '@supabase/supabase-js';
 
 // 분리된 컴포넌트 임포트
 import { CalendarHeader } from '../components/CalendarHeader';
 import { CalendarGrid } from '../components/CalendarGrid';
 import { AddContentModal } from '../components/AddContentModal';
 import { BottomNav } from '../components/BottomNav';
+import Login from '../components/Login';
 
 const StatsDashboard = dynamic(() => import('../components/StatsDashboard'), {
   loading: () => <div className="h-80 bg-[#1e293b]/30 animate-pulse rounded-3xl" />,
@@ -30,10 +34,14 @@ interface EnhancedContent extends Video {
 type EnhancedVideosByDate = { [key: string]: EnhancedContent[] };
 
 export default function CalendarPage() {
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  
   const [activeTab, setActiveTab] = useState<'calendar' | 'stats'>('calendar');
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [videos, setVideos] = useState<EnhancedVideosByDate>({});
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<'all' | 'video' | 'photo' | 'note'>('all');
   
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -46,9 +54,25 @@ export default function CalendarPage() {
   const [newNote, setNewNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // 1. 인증 상태 감시
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setAuthLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
   const fetchVideos = useCallback(async () => {
+    if (!user) return;
     try {
-      const res = await fetch('/api/videos?calendar=기본 캘린더');
+      // API 호출 시 사용자 ID를 쿼리로 전달 (서버사이드에서 사용)
+      const res = await fetch(`/api/videos?calendar=기본 캘린더&userId=${user.id}`);
       const data: EnhancedContent[] = await res.json();
       
       const grouped = data.reduce((acc: EnhancedVideosByDate, content) => {
@@ -73,31 +97,27 @@ export default function CalendarPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedDate]);
+  }, [selectedDate, user]);
 
   useEffect(() => {
-    fetchVideos();
-  }, [fetchVideos]);
+    if (user) fetchVideos();
+  }, [fetchVideos, user]);
 
   const handleAddContent = async (e: React.FormEvent, file?: File) => {
     e.preventDefault();
+    if (!user) return;
     setIsSubmitting(true);
     try {
       let res;
-      // 사진 업로드라면 FormData 사용
       if (mediaType === 'photo' && file) {
         const formData = new FormData();
         formData.append('media_type', 'photo');
         formData.append('video_date', selectedDate);
         formData.append('calendar_name', '기본 캘린더');
         formData.append('file', file);
-        
-        res = await fetch('/api/videos', {
-          method: 'POST',
-          body: formData
-        });
+        formData.append('user_id', user.id); // 사용자 ID 추가
+        res = await fetch('/api/videos', { method: 'POST', body: formData });
       } else {
-        // 영상이나 메모는 기존처럼 JSON 사용
         res = await fetch('/api/videos', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -107,7 +127,8 @@ export default function CalendarPage() {
             image_url: null,
             note_content: mediaType === 'note' ? newNote : null,
             video_date: selectedDate,
-            calendar_name: '기본 캘린더'
+            calendar_name: '기본 캘린더',
+            user_id: user.id // 사용자 ID 추가
           })
         });
       }
@@ -120,7 +141,6 @@ export default function CalendarPage() {
         alert(`저장 실패: ${errorData.error || '상세 사유 모름'}`);
       }
     } catch (error: any) {
-      console.error('Save Error:', error);
       alert(`네트워크 오차: ${error.message}`);
     } finally {
       setIsSubmitting(false);
@@ -138,6 +158,10 @@ export default function CalendarPage() {
     } catch (error) {
       alert('삭제 실패');
     }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
   };
 
   const days = useMemo(() => eachDayOfInterval({
@@ -171,6 +195,12 @@ export default function CalendarPage() {
     }
   }, []);
 
+  // 로딩 중 화면
+  if (authLoading) return <div className="min-h-screen bg-[#0f172a] flex items-center justify-center"><div className="w-8 h-8 border-4 border-red-500 border-t-transparent rounded-full animate-spin" /></div>;
+
+  // 로그인 안된 경우 로그인 화면 표시
+  if (!user) return <Login />;
+
   return (
     <div className="min-h-screen bg-[#0f172a] text-white font-sans pb-24 select-none">
       <CalendarHeader 
@@ -180,10 +210,43 @@ export default function CalendarPage() {
       />
 
       <main className="p-4 overflow-x-hidden">
+        {/* 미디어 필터 바 */}
+        <AnimatePresence>
+          {activeTab === 'calendar' && (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }} 
+              animate={{ opacity: 1, scale: 1 }} 
+              exit={{ opacity: 0, scale: 0.95 }} 
+              className="flex gap-2 mb-6 px-3 py-3 overflow-x-auto custom-scrollbar bg-white/5 rounded-2xl border border-white/10 backdrop-blur-md sticky top-0 z-40"
+            >
+              {[
+                { id: 'all', label: '전체보기', icon: Layers, color: 'text-white', bg: 'bg-white/20' },
+                { id: 'video', label: '영상기록', icon: Youtube, color: 'text-red-500', bg: 'bg-red-500/10' },
+                { id: 'photo', label: '사진기록', icon: ImageIcon, color: 'text-blue-400', bg: 'bg-blue-400/10' },
+                { id: 'note', label: '메모기록', icon: FileText, color: 'text-amber-400', bg: 'bg-amber-400/10' }
+              ].map((f) => (
+                <button 
+                  key={f.id} 
+                  onClick={() => setFilter(f.id as any)}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl whitespace-nowrap transition-all duration-500 border ${filter === f.id ? `${f.bg} border-white/30 shadow-lg scale-105 z-10` : 'bg-transparent border-white/5 opacity-40 hover:opacity-100 hover:bg-white/5'}`}
+                >
+                  <f.icon size={16} className={f.color} />
+                  <span className={`text-[11px] font-black tracking-tight ${filter === f.id ? 'text-white' : 'text-slate-400'}`}>{f.label}</span>
+                </button>
+              ))}
+              {/* 로그아웃 버튼 추가 */}
+              <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2.5 rounded-xl whitespace-nowrap transition-all duration-500 border bg-white/5 border-white/5 opacity-40 hover:opacity-100 hover:bg-red-500/20 hover:border-red-500/30">
+                <LogOut size={16} className="text-slate-400" />
+                <span className="text-[11px] font-black tracking-tight text-slate-400">로그아웃</span>
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <AnimatePresence mode="wait">
           {activeTab === 'calendar' ? (
             <motion.div key="calendar" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}>
-              <CalendarGrid days={days} videos={videos} onCellClick={handleCellClick} />
+              <CalendarGrid days={days} videos={videos} onCellClick={handleCellClick} filter={filter} />
             </motion.div>
           ) : (
             <motion.div key="stats" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
@@ -211,7 +274,7 @@ export default function CalendarPage() {
       }} />
 
       {loading && (
-        <div className="fixed inset-0 bg-[#0f172a] flex items-center justify-center z-[200]">
+        <div className="fixed inset-0 bg-[#0f172a]/50 flex items-center justify-center z-[200]">
           <div className="w-10 h-10 border-4 border-red-500 border-t-transparent rounded-full animate-spin shadow-lg"></div>
         </div>
       )}
