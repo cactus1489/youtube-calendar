@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { MonitorPlay as Youtube, Image as ImageIcon, FileText, Layers, LogOut } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
+import heic2any from 'heic2any';
 
 // 분리된 컴포넌트 임포트
 import { CalendarHeader } from '../components/CalendarHeader';
@@ -109,13 +110,34 @@ export default function CalendarPage() {
     setIsSubmitting(true);
     try {
       let res;
+      let uploadFile = file;
+
+      // Photo 타입이고 파일이 있으면 HEIC 변환 체크
       if (mediaType === 'photo' && file) {
+        if (file.name.toLowerCase().endsWith('.heic')) {
+          console.log('--- HEIC DETECTED: CONVERTING TO JPG ---');
+          try {
+            const blob = await heic2any({ 
+              blob: file, 
+              toType: 'image/jpeg',
+              quality: 0.8 
+            });
+            const newBlob = Array.isArray(blob) ? blob[0] : blob;
+            uploadFile = new File([newBlob], file.name.replace(/\.heic$/i, '.jpg'), {
+              type: 'image/jpeg'
+            });
+            console.log('--- CONVERSION SUCCESSFUL ---');
+          } catch (convError) {
+            console.error('HEIC Conversion failed, trying original file:', convError);
+          }
+        }
+
         const formData = new FormData();
         formData.append('media_type', 'photo');
         formData.append('video_date', selectedDate);
         formData.append('calendar_name', '기본 캘린더');
-        formData.append('file', file);
-        formData.append('user_id', user.id); // 사용자 ID 추가
+        formData.append('file', uploadFile || file);
+        formData.append('user_id', user.id);
         res = await fetch('/api/videos', { method: 'POST', body: formData });
       } else {
         res = await fetch('/api/videos', {
