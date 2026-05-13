@@ -106,50 +106,74 @@ export default function CalendarPage() {
   const handleAddContent = async (e: React.FormEvent, files?: FileList | null) => {
     e.preventDefault();
     if (!user) return;
-    setIsSubmitting(true);
+
+    // 1. 낙관적 업데이트 데이터 생성
+    const tempItems: EnhancedContent[] = [];
+    const nowStr = new Date().toISOString();
     
+    if (mediaType === 'photo' && files && files.length > 0) {
+      for (let i = 0; i < files.length; i++) {
+        tempItems.push({
+          id: -Date.now() - i, // 임시 ID (음수)
+          video_date: selectedDate,
+          media_type: 'photo',
+          image_url: URL.createObjectURL(files[i]), // 즉시 보여줄 로컬 URL
+          video_title: '업로드 중...',
+          added_at: nowStr
+        } as any);
+      }
+    } else if (mediaType === 'note' && newNote) {
+      tempItems.push({
+        id: -Date.now(),
+        video_date: selectedDate,
+        media_type: 'note',
+        note_content: newNote,
+        added_at: nowStr
+      } as any);
+    } else if (mediaType === 'video' && newUrl) {
+      const regex = /(?:v=|\/|embed\/|shorts\/|youtu.be\/)([0-9A-Za-z_-]{11})/;
+      const videoId = newUrl.match(regex)?.[1];
+      tempItems.push({
+        id: -Date.now(),
+        video_date: selectedDate,
+        media_type: 'video',
+        video_id: videoId || '',
+        video_url: newUrl,
+        video_title: '불러오는 중...',
+        added_at: nowStr
+      } as any);
+    }
+
+    // 2.UI에 즉시 반영
+    const previousItems = videos[selectedDate] || [];
+    setVideos(prev => ({
+      ...prev,
+      [selectedDate]: [...previousItems, ...tempItems]
+    }));
+    
+    // 모달은 바로 닫기
+    setIsAddModalOpen(false);
+    
+    setIsSubmitting(true);
     try {
       if (mediaType === 'photo' && files && files.length > 0) {
-        // 브라우저 전용 라이브러리 동적 임포트
         const heic2any = (await import('heic2any')).default;
         const imageCompression = (await import('browser-image-compression')).default;
 
-        // 여러 장의 사진 순차 업로드
         for (let i = 0; i < files.length; i++) {
           const file = files[i];
           let uploadFile = file;
 
-          // 1. HEIC 이면 JPG로 변환
           if (file.name.toLowerCase().endsWith('.heic')) {
             try {
-              const blob = await heic2any({ 
-                blob: file, 
-                toType: 'image/jpeg',
-                quality: 0.8 
-              });
+              const blob = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.8 });
               const newBlob = Array.isArray(blob) ? blob[0] : blob;
-              uploadFile = new File([newBlob], file.name.replace(/\.heic$/i, '.jpg'), {
-                type: 'image/jpeg'
-              });
-            } catch (convError) {
-              console.error('HEIC Conversion failed:', convError);
-            }
+              uploadFile = new File([newBlob], file.name.replace(/\.heic$/i, '.jpg'), { type: 'image/jpeg' });
+            } catch (convError) { console.error(convError); }
           }
 
-          // 2. 이미지 압축 (최대 1MB, 최대 너비 1280px)
-          const compressionOptions = {
-            maxSizeMB: 1,
-            maxWidthOrHeight: 1280,
-            useWebWorker: true
-          };
-          
-          try {
-            console.log(`--- COMPRESSING: ${uploadFile.name} ---`);
-            uploadFile = await imageCompression(uploadFile as File, compressionOptions);
-            console.log(`--- COMPRESSED: ${uploadFile.size / 1024 / 1024} MB ---`);
-          } catch (compError) {
-            console.error('Compression failed:', compError);
-          }
+          const compressionOptions = { maxSizeMB: 1, maxWidthOrHeight: 1280, useWebWorker: true };
+          try { uploadFile = await imageCompression(uploadFile as File, compressionOptions); } catch (e) {}
 
           const formData = new FormData();
           formData.append('media_type', 'photo');
@@ -159,17 +183,9 @@ export default function CalendarPage() {
           formData.append('user_id', user.id);
           
           const res = await fetch('/api/videos', { method: 'POST', body: formData });
-          if (!res.ok) {
-            const errorData = await res.json();
-            throw new Error(errorData.error || '업로드 중 오류 발생');
-          }
+          if (!res.ok) throw new Error('업로드 실패');
         }
-        
-        setNewImageUrl('');
-        setIsAddModalOpen(false);
-        fetchVideos();
       } else if (mediaType !== 'photo') {
-        // 비디오 또는 메모 업로드 (기존 로직 유지)
         const res = await fetch('/api/videos', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -183,17 +199,19 @@ export default function CalendarPage() {
             user_id: user.id
           })
         });
-
-        if (res.ok) {
-          setNewUrl(''); setNewNote('');
-          setIsAddModalOpen(false); fetchVideos();
-        } else {
-          const errorData = await res.json();
-          alert(`저장 실패: ${errorData.error || '상세 사유 모름'}`);
-        }
+        if (!res.ok) throw new Error('저장 실패');
       }
+
+      // 최종 성공 시 실데이터로 갱신
+      setNewUrl(''); setNewNote(''); setNewImageUrl('');
+      fetchVideos();
     } catch (error: any) {
       alert(`저장 오류: ${error.message}`);
+      // 실패 시 롤백: 낙관적 업데이트로 추가된 항목 제거
+      setVideos(prev => ({
+        ...prev,
+        [selectedDate]: previousItems
+      }));
     } finally {
       setIsSubmitting(false);
     }

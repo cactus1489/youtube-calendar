@@ -84,6 +84,13 @@ export const CalendarGrid = memo(({ days, videos, onCellClick, filter }: Props) 
 
             {/* 중앙 메모 오버레이 (향상된 가독성) */}
             <div className="relative z-10 flex flex-col items-center gap-1">
+              {/* 낙관적 업데이트 로딩 표시 */}
+              {dayItems.some(i => i.id && i.id < 0) && (
+                <div className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none">
+                  <Clock size={20} className="text-white/50 animate-pulse" />
+                </div>
+              )}
+
               {hasContent && noteItem && (
                 <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="px-2 text-center">
                    <p className="text-[9px] sm:text-[11px] font-bold text-amber-300 line-clamp-2 leading-tight drop-shadow-[0_2px_4px_rgba(0,0,0,1)] uppercase tracking-tighter">
