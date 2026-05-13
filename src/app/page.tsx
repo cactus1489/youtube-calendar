@@ -9,6 +9,7 @@ import { MonitorPlay as Youtube, Image as ImageIcon, FileText, Layers, LogOut } 
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import heic2any from 'heic2any';
+import imageCompression from 'browser-image-compression';
 
 // 분리된 컴포넌트 임포트
 import { CalendarHeader } from '../components/CalendarHeader';
@@ -116,6 +117,7 @@ export default function CalendarPage() {
           const file = files[i];
           let uploadFile = file;
 
+          // 1. HEIC 이면 JPG로 변환
           if (file.name.toLowerCase().endsWith('.heic')) {
             try {
               const blob = await heic2any({ 
@@ -130,6 +132,21 @@ export default function CalendarPage() {
             } catch (convError) {
               console.error('HEIC Conversion failed:', convError);
             }
+          }
+
+          // 2. 이미지 압축 (최대 1MB, 최대 너비 1280px)
+          const compressionOptions = {
+            maxSizeMB: 1,
+            maxWidthOrHeight: 1280,
+            useWebWorker: true
+          };
+          
+          try {
+            console.log(`--- COMPRESSING: ${uploadFile.name} ---`);
+            uploadFile = await imageCompression(uploadFile as File, compressionOptions);
+            console.log(`--- COMPRESSED: ${uploadFile.size / 1024 / 1024} MB ---`);
+          } catch (compError) {
+            console.error('Compression failed:', compError);
           }
 
           const formData = new FormData();

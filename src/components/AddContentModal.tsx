@@ -2,7 +2,7 @@
 
 import { X, MonitorPlay as Youtube, Image as ImageIcon, FileText, Plus, Upload } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { memo, useRef } from 'react';
+import { memo, useRef, useState, useEffect } from 'react';
 
 interface Props {
   isOpen: boolean;
@@ -26,6 +26,32 @@ export const AddContentModal = memo(({
   onClose, setMediaType, setTargetDate, setNewUrl, setNewImageUrl, setNewNote, onSubmit 
 }: Props) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [previews, setPreviews] = useState<string[]>([]);
+
+  // 파일 선택 시 프리뷰 생성
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    setNewImageUrl(e.target.value || '');
+    
+    if (files) {
+      // 기존 프리뷰 제거 (메모리 해제)
+      previews.forEach(p => URL.revokeObjectURL(p));
+      
+      const newPreviews = Array.from(files).map(file => URL.createObjectURL(file));
+      setPreviews(newPreviews);
+    } else {
+      setPreviews([]);
+    }
+  };
+
+  // 모달 닫힐 때 혹은 언마운트 시 프리뷰 객체 URL 해제
+  useEffect(() => {
+    if (!isOpen) {
+      previews.forEach(p => URL.revokeObjectURL(p));
+      setPreviews([]);
+    }
+    return () => previews.forEach(p => URL.revokeObjectURL(p));
+  }, [isOpen]);
 
   const handleFormSubmit = (e: React.FormEvent) => {
     const files = fileInputRef.current?.files;
@@ -81,10 +107,16 @@ export const AddContentModal = memo(({
                       onClick={() => fileInputRef.current?.click()}
                       className="w-full aspect-video bg-black/20 border-2 border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center gap-3 cursor-pointer hover:bg-black/30 hover:border-blue-400/30 transition-all group overflow-hidden relative"
                     >
-                      {fileInputRef.current?.files && fileInputRef.current.files.length > 0 ? (
-                        <div className="text-center">
-                          <p className="text-[10px] font-bold text-blue-400">{fileInputRef.current.files.length} Files Selected</p>
-                          <p className="text-[8px] text-slate-500 mt-1">Click to change selection</p>
+                      {previews.length > 0 ? (
+                        <div className="grid grid-cols-3 gap-2 p-4 w-full h-full overflow-y-auto">
+                          {previews.map((src, i) => (
+                            <div key={i} className="aspect-square relative rounded-lg overflow-hidden border border-white/10">
+                              <img src={src} className="w-full h-full object-cover" alt={`preview ${i}`} />
+                              {i === 2 && previews.length > 3 && (
+                                <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-xs font-black">+{previews.length - 3}</div>
+                              )}
+                            </div>
+                          ))}
                         </div>
                       ) : (
                         <>
@@ -97,7 +129,7 @@ export const AddContentModal = memo(({
                       <input 
                         type="file" 
                         ref={fileInputRef} 
-                        onChange={() => setNewImageUrl(fileInputRef.current?.value || '')} 
+                        onChange={handleFileChange} 
                         className="hidden" 
                         accept="image/*"
                         multiple
