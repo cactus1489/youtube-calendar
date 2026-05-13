@@ -104,43 +104,54 @@ export default function CalendarPage() {
     if (user) fetchVideos();
   }, [fetchVideos, user]);
 
-  const handleAddContent = async (e: React.FormEvent, file?: File) => {
+  const handleAddContent = async (e: React.FormEvent, files?: FileList | null) => {
     e.preventDefault();
     if (!user) return;
     setIsSubmitting(true);
+    
     try {
-      let res;
-      let uploadFile = file;
+      if (mediaType === 'photo' && files && files.length > 0) {
+        // 여러 장의 사진 순차 업로드
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          let uploadFile = file;
 
-      // Photo 타입이고 파일이 있으면 HEIC 변환 체크
-      if (mediaType === 'photo' && file) {
-        if (file.name.toLowerCase().endsWith('.heic')) {
-          console.log('--- HEIC DETECTED: CONVERTING TO JPG ---');
-          try {
-            const blob = await heic2any({ 
-              blob: file, 
-              toType: 'image/jpeg',
-              quality: 0.8 
-            });
-            const newBlob = Array.isArray(blob) ? blob[0] : blob;
-            uploadFile = new File([newBlob], file.name.replace(/\.heic$/i, '.jpg'), {
-              type: 'image/jpeg'
-            });
-            console.log('--- CONVERSION SUCCESSFUL ---');
-          } catch (convError) {
-            console.error('HEIC Conversion failed, trying original file:', convError);
+          if (file.name.toLowerCase().endsWith('.heic')) {
+            try {
+              const blob = await heic2any({ 
+                blob: file, 
+                toType: 'image/jpeg',
+                quality: 0.8 
+              });
+              const newBlob = Array.isArray(blob) ? blob[0] : blob;
+              uploadFile = new File([newBlob], file.name.replace(/\.heic$/i, '.jpg'), {
+                type: 'image/jpeg'
+              });
+            } catch (convError) {
+              console.error('HEIC Conversion failed:', convError);
+            }
+          }
+
+          const formData = new FormData();
+          formData.append('media_type', 'photo');
+          formData.append('video_date', selectedDate);
+          formData.append('calendar_name', '기본 캘린더');
+          formData.append('file', uploadFile);
+          formData.append('user_id', user.id);
+          
+          const res = await fetch('/api/videos', { method: 'POST', body: formData });
+          if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(errorData.error || '업로드 중 오류 발생');
           }
         }
-
-        const formData = new FormData();
-        formData.append('media_type', 'photo');
-        formData.append('video_date', selectedDate);
-        formData.append('calendar_name', '기본 캘린더');
-        formData.append('file', uploadFile || file);
-        formData.append('user_id', user.id);
-        res = await fetch('/api/videos', { method: 'POST', body: formData });
-      } else {
-        res = await fetch('/api/videos', {
+        
+        setNewImageUrl('');
+        setIsAddModalOpen(false);
+        fetchVideos();
+      } else if (mediaType !== 'photo') {
+        // 비디오 또는 메모 업로드 (기존 로직 유지)
+        const res = await fetch('/api/videos', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -150,20 +161,20 @@ export default function CalendarPage() {
             note_content: mediaType === 'note' ? newNote : null,
             video_date: selectedDate,
             calendar_name: '기본 캘린더',
-            user_id: user.id // 사용자 ID 추가
+            user_id: user.id
           })
         });
-      }
 
-      if (res.ok) {
-        setNewUrl(''); setNewImageUrl(''); setNewNote('');
-        setIsAddModalOpen(false); fetchVideos();
-      } else {
-        const errorData = await res.json();
-        alert(`저장 실패: ${errorData.error || '상세 사유 모름'}`);
+        if (res.ok) {
+          setNewUrl(''); setNewNote('');
+          setIsAddModalOpen(false); fetchVideos();
+        } else {
+          const errorData = await res.json();
+          alert(`저장 실패: ${errorData.error || '상세 사유 모름'}`);
+        }
       }
     } catch (error: any) {
-      alert(`네트워크 오차: ${error.message}`);
+      alert(`저장 오류: ${error.message}`);
     } finally {
       setIsSubmitting(false);
     }

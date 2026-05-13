@@ -18,7 +18,7 @@ interface Props {
   setNewUrl: (url: string) => void;
   setNewImageUrl: (url: string) => void;
   setNewNote: (note: string) => void;
-  onSubmit: (e: React.FormEvent, file?: File) => void;
+  onSubmit: (e: React.FormEvent, files?: FileList | null) => void;
 }
 
 export const AddContentModal = memo(({ 
@@ -28,8 +28,8 @@ export const AddContentModal = memo(({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFormSubmit = (e: React.FormEvent) => {
-    const file = fileInputRef.current?.files?.[0];
-    onSubmit(e, file);
+    const files = fileInputRef.current?.files;
+    onSubmit(e, files);
   };
 
   return (
@@ -76,27 +76,31 @@ export const AddContentModal = memo(({
 
                 {mediaType === 'photo' && (
                   <div>
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Upload Image</label>
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Upload Images</label>
                     <div 
                       onClick={() => fileInputRef.current?.click()}
                       className="w-full aspect-video bg-black/20 border-2 border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center gap-3 cursor-pointer hover:bg-black/30 hover:border-blue-400/30 transition-all group overflow-hidden relative"
                     >
-                      {newImageUrl ? (
-                        <p className="text-[10px] font-bold text-blue-400">File Selected: {newImageUrl.split('\\').pop()}</p>
+                      {fileInputRef.current?.files && fileInputRef.current.files.length > 0 ? (
+                        <div className="text-center">
+                          <p className="text-[10px] font-bold text-blue-400">{fileInputRef.current.files.length} Files Selected</p>
+                          <p className="text-[8px] text-slate-500 mt-1">Click to change selection</p>
+                        </div>
                       ) : (
                         <>
                           <Upload size={32} className="text-slate-600 group-hover:text-blue-400 transition-colors" />
                           <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest text-center">
-                            Click to select from gallery<br/><span className="text-[8px] font-medium opacity-50 lowercase">(jpg, png, gif)</span>
+                            Click to select from gallery<br/><span className="text-[8px] font-medium opacity-50 lowercase">(jpg, png, gif, heic)</span>
                           </p>
                         </>
                       )}
                       <input 
                         type="file" 
                         ref={fileInputRef} 
-                        onChange={(e) => setNewImageUrl(e.target.value)} 
+                        onChange={() => setNewImageUrl(fileInputRef.current?.value || '')} 
                         className="hidden" 
                         accept="image/*"
+                        multiple
                       />
                     </div>
                   </div>
@@ -113,7 +117,7 @@ export const AddContentModal = memo(({
 
               <button type="submit" disabled={isSubmitting}
                 className="w-full py-4 bg-red-600 hover:bg-red-500 text-white font-black rounded-2xl shadow-xl shadow-red-900/20 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-                {isSubmitting ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><Plus size={18} /> <span className="tracking-[0.2em] text-xs">SAVE MEMORY</span></>}
+                {isSubmitting ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><Plus size={18} /> <span className="tracking-[0.2em] text-xs">SAVE MEMORIES</span></>}
               </button>
             </form>
           </motion.div>
