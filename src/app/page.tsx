@@ -160,10 +160,11 @@ export default function CalendarPage() {
         const heic2any = (await import('heic2any')).default;
         const imageCompression = (await import('browser-image-compression')).default;
 
-        for (let i = 0; i < files.length; i++) {
-          const file = files[i];
+        // 병렬 처리를 위해 프로미스 배열 생성
+        const uploadPromises = Array.from(files).map(async (file) => {
           let uploadFile = file;
 
+          // 1. HEIC 변환
           if (file.name.toLowerCase().endsWith('.heic')) {
             try {
               const blob = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.8 });
@@ -172,7 +173,12 @@ export default function CalendarPage() {
             } catch (convError) { console.error(convError); }
           }
 
-          const compressionOptions = { maxSizeMB: 1, maxWidthOrHeight: 1280, useWebWorker: true };
+          // 2. 이미지 압축 (속도를 위해 설정값 약간 하향 조정)
+          const compressionOptions = { 
+            maxSizeMB: 0.8, 
+            maxWidthOrHeight: 1200, 
+            useWebWorker: true 
+          };
           try { uploadFile = await imageCompression(uploadFile as File, compressionOptions); } catch (e) {}
 
           const formData = new FormData();
@@ -183,8 +189,12 @@ export default function CalendarPage() {
           formData.append('user_id', user.id);
           
           const res = await fetch('/api/videos', { method: 'POST', body: formData });
-          if (!res.ok) throw new Error('업로드 실패');
-        }
+          if (!res.ok) throw new Error(`${file.name} 업로드 실패`);
+          return res;
+        });
+
+        // 모든 업로드 동시 실행
+        await Promise.all(uploadPromises);
       } else if (mediaType !== 'photo') {
         const res = await fetch('/api/videos', {
           method: 'POST',
