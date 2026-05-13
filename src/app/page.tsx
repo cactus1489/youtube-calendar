@@ -8,8 +8,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { MonitorPlay as Youtube, Image as ImageIcon, FileText, Layers, LogOut } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
-import heic2any from 'heic2any';
-import imageCompression from 'browser-image-compression';
 
 // 분리된 컴포넌트 임포트
 import { CalendarHeader } from '../components/CalendarHeader';
@@ -112,6 +110,10 @@ export default function CalendarPage() {
     
     try {
       if (mediaType === 'photo' && files && files.length > 0) {
+        // 브라우저 전용 라이브러리 동적 임포트
+        const heic2any = (await import('heic2any')).default;
+        const imageCompression = (await import('browser-image-compression')).default;
+
         // 여러 장의 사진 순차 업로드
         for (let i = 0; i < files.length; i++) {
           const file = files[i];
