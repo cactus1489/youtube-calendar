@@ -244,10 +244,11 @@ export default function CalendarPage() {
     await supabase.auth.signOut();
   };
 
-  const days = useMemo(() => eachDayOfInterval({
-    start: startOfMonth(currentMonth),
-    end: endOfMonth(currentMonth),
-  }), [currentMonth]);
+  const days = useMemo(() => {
+    const start = startOfWeek(startOfMonth(currentMonth), { weekStartsOn: 0 });
+    const end = endOfWeek(endOfMonth(currentMonth), { weekStartsOn: 0 });
+    return eachDayOfInterval({ start, end });
+  }, [currentMonth]);
 
   const { statsData, totalWeeklyMinutes } = useMemo(() => {
     const today = new Date();
@@ -326,7 +327,7 @@ export default function CalendarPage() {
         <AnimatePresence mode="wait">
           {activeTab === 'calendar' ? (
             <motion.div key="calendar" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}>
-              <CalendarGrid days={days} videos={videos} onCellClick={handleCellClick} filter={filter} />
+              <CalendarGrid days={days} currentMonth={currentMonth} videos={videos} onCellClick={handleCellClick} filter={filter} />
             </motion.div>
           ) : (
             <motion.div key="stats" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>

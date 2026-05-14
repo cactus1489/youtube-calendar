@@ -1,7 +1,7 @@
 'use client';
 
 import { Plus, MonitorPlay as Youtube, Image as ImageIcon, FileText, Clock } from 'lucide-react';
-import { format, isSameDay } from 'date-fns';
+import { format, isSameDay, isSameMonth } from 'date-fns';
 import { memo } from 'react';
 import { Video } from '@/lib/types';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -14,12 +14,13 @@ interface EnhancedContent extends Video {
 
 interface Props {
   days: Date[];
+  currentMonth: Date;
   videos: { [key: string]: EnhancedContent[] };
   onCellClick: (date: string, items: EnhancedContent[]) => void;
   filter: 'all' | 'video' | 'photo' | 'note';
 }
 
-export const CalendarGrid = memo(({ days, videos, onCellClick, filter }: Props) => {
+export const CalendarGrid = memo(({ days, currentMonth, videos, onCellClick, filter }: Props) => {
   const today = new Date();
 
   return (
@@ -47,6 +48,8 @@ export const CalendarGrid = memo(({ days, videos, onCellClick, filter }: Props) 
         
         const displayItem = photoItem || videoItem || noteItem;
 
+        const isSelectedMonth = isSameMonth(day, currentMonth);
+
         return (
           <motion.div
             layout
@@ -57,6 +60,7 @@ export const CalendarGrid = memo(({ days, videos, onCellClick, filter }: Props) 
               transition-all duration-500 overflow-hidden group
               ${isToday ? 'bg-white/10 ring-2 ring-white/20' : 'bg-[#1e293b]/40 hover:bg-[#1e293b]/60'}
               ${hasContent ? 'shadow-xl' : 'border border-white/[0.03]'}
+              ${!isSelectedMonth ? 'opacity-20 grayscale-[0.5]' : 'opacity-100'}
             `}
           >
             {/* 오늘 날짜 표시 */}
